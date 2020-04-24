@@ -18,7 +18,7 @@
 //typedef enum { FALSE , TRUE } bool;
 int BgCmd(char* lineSize);
 int ExeCmd(char* lineSize, const char* cmdString);
-void ExeExternal(char** args, const char* cmdString);
+int ExeExternal(char** args, const char* cmdString);
 bool is_ligal_kill(vector <char*> args, int num_arg);
 int find_last_stopped();
 int get_job_idx(int pid);

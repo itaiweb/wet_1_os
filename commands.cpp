@@ -18,6 +18,8 @@ string sig_str[64] = {"SIGHUP" ,"SIGINT" ,"SIGQUIT" ,"SIGILL" ,"SIGTRAP", "SIGAB
  "SIGRTMAX-14" ,"SIGRTMAX-13" ,"SIGRTMAX-12", "SIGRTMAX-11" ,"SIGRTMAX-10" ,"SIGRTMAX-9" ,"SIGRTMAX-8" ,"SIGRTMAX-7", "SIGRTMAX-6" ,"SIGRTMAX-5" ,
  "SIGRTMAX-4" ,"SIGRTMAX-3" ,"SIGRTMAX-2", "SIGRTMAX-1" ,"SIGRTMAX"};
 
+bool pre_cwd_valid = true;
+bool first_cwd = true;
 //********************************************
 // function name: ExeCmd
 // Description: interperts and executes built-in commands
@@ -26,7 +28,7 @@ string sig_str[64] = {"SIGHUP" ,"SIGINT" ,"SIGQUIT" ,"SIGILL" ,"SIGTRAP", "SIGAB
 //**************************************************************************************
 int ExeCmd(char* lineSize, const char* cmdString)
 {
-	static string pre_cwd;
+	static char* pre_cwd;
 	char* cmd;
 	string errorMsg = "";
 	vector <char*> args;
@@ -64,7 +66,13 @@ int ExeCmd(char* lineSize, const char* cmdString)
 		{
 			if (!strcmp(args[1], "-"))
 			{
-				cd = pre_cwd;
+				if (first_cwd) {
+					illegal_cmd = true;
+					errorMsg = "No previous working directory";
+				}
+				else {
+					cd = pre_cwd;
+				}
 			}
 			else
 			{
@@ -78,12 +86,17 @@ int ExeCmd(char* lineSize, const char* cmdString)
 		if (!illegal_cmd)
 		{
 			// getcwd(pre_cwd, sizeof(pre_cwd));
+			if (!pre_cwd_valid)
+				free(pre_cwd);
 			pre_cwd = get_current_dir_name();
+			pre_cwd_valid = false;
 			if (chdir(cd.c_str()) == -1)
 			{
-				
 				errorMsg = "\"" + cd + "\"" + " - No such file or directory";
 				illegal_cmd = true;
+			}
+			else {
+				first_cwd = false;
 			}
 		}
 	}
@@ -91,7 +104,7 @@ int ExeCmd(char* lineSize, const char* cmdString)
 	/*************************************************/
 	 else if (!strcmp(cmd, "pwd")) 
 	{
-		string cwd;
+		char* cwd;
 		if (num_arg > 0)
 		{
 			illegal_cmd = true;
@@ -102,6 +115,7 @@ int ExeCmd(char* lineSize, const char* cmdString)
 			cwd = get_current_dir_name();
 			// getcwd(cwd, sizeof(cwd));
 			cout << cwd << endl;
+			free(cwd);
 		}
 	}
 	
@@ -283,7 +297,8 @@ int ExeCmd(char* lineSize, const char* cmdString)
 			errorMsg = "\"" + (string)cmdString + "\"";
 		}
 		else if (num_arg == 0) {
-			exit(1);
+			free(pre_cwd);
+			return -1;
 		}
 		else {
 			if (strcmp(args[1], "kill")) {
@@ -292,7 +307,8 @@ int ExeCmd(char* lineSize, const char* cmdString)
 			}
 			else {
 				kill_all();
-				exit(1);
+				free(pre_cwd);
+				return -1;
 			}
 		}
 	}
@@ -370,8 +386,9 @@ int ExeCmd(char* lineSize, const char* cmdString)
 	/*************************************************/
 	else // external command
 	{
- 		ExeExternal(&args[0], cmdString);
-	 	return 0;
+		if (ExeExternal(&args[0], cmdString) == -1)
+			return -1;
+		return 0;
 	}
 	if (illegal_cmd == true)
 	{
@@ -397,33 +414,36 @@ int ExeCmd(char* lineSize, const char* cmdString)
 // Parameters: external command arguments, external command string
 // Returns: void
 //**************************************************************************************
-void ExeExternal(char** args, const char* cmdString)
+int ExeExternal(char** args, const char* cmdString)
 {
 	int pID;
-    	switch(pID = fork()) 
+	switch (pID = fork())
 	{
-    		case -1: 
-					// Add your code here (error)
-					perror("smash error: > ");
-        	case 0 :
-                	// Child Process
-               		setpgrp();
-			        // Add your code here (execute an external command)
-					execv(args[0], args + 1);
-					perror("smash error: > ");
-					exit(-1);
-			
-			default:
-					int return_status;
-					Job child(pID, args[0], time(NULL));
-					jobs.push_back(child);
-					Job& fg_job = jobs.back();
-					fg_pid = pID;
-					waitpid(pID, &return_status, WUNTRACED);
-					if((fg_job.is_running()) && (get_job_idx(pID) != -1)){
-						jobs.erase(jobs.begin() + get_job_idx(pID));
-					}
+	case -1:
+		// Add your code here (error)
+		perror("smash error: > ");
+		return 0;
+	case 0:
+		// Child Process
+		setpgrp();
+		// Add your code here (execute an external command)
+		execv(args[0], args + 1);
+		perror("smash error: > ");
+		return -1;
+
+	default:
+		int return_status;
+		Job child(pID, args[0], time(NULL));
+		jobs.push_back(child);
+		Job& fg_job = jobs.back();
+		fg_pid = pID;
+		waitpid(pID, &return_status, WUNTRACED);
+		if ((fg_job.is_running()) && (get_job_idx(pID) != -1)) {
+			jobs.erase(jobs.begin() + get_job_idx(pID));
+		}
+		return 0;
 	}
+	return 0;
 }
 //**************************************************************************************
 // function name: BgCmd
@@ -435,9 +455,9 @@ int BgCmd(char* lineSize)
 {
 	const char* delimiters = " \t\n";
 	vector <char*> args;
-	if (lineSize[strlen(lineSize)-1] == '&')
+	if (lineSize[strlen(lineSize) - 1] == '&')
 	{
-		lineSize[strlen(lineSize)-1] = '\0';
+		lineSize[strlen(lineSize) - 1] = '\0';
 		// Add your code here (execute a in the background)
 
 		int pID, num_arg = 0, parentpID;
@@ -446,12 +466,12 @@ int BgCmd(char* lineSize)
 		cmd = strtok(lineSize, delimiters);
 		if (cmd == NULL)
 			return 0;
-   		args.push_back(cmd);
-		while(args[num_arg] != NULL){
+		args.push_back(cmd);
+		while (args[num_arg] != NULL) {
 			args.push_back(strtok(NULL, delimiters));
 			num_arg++;
 		}
-		num_arg --;
+		num_arg--;
 		parentpID = getpid();
 
 		switch (pID = fork())
@@ -460,6 +480,7 @@ int BgCmd(char* lineSize)
 			{
 				// Add your code here (error)
 				perror("smash error: > ");
+				return 0;
 			}
 			case 0:
 			{
@@ -469,34 +490,34 @@ int BgCmd(char* lineSize)
 				execv(cmd, &(args[1]));
 				perror("smash error: > ");
 				cout << "smash > ";
-			exit(-1);
+				return -1;
 			}
 			default:
 			{
-				Job child(pID, cmd, time(NULL));
+				Job child(pID, args[0], time(NULL));
 				jobs.push_back(child);
 				return 0;
 			}
 		}
 	}
-	return -1;
+	return 1;
 }
 
 
 
-bool is_ligal_kill(vector <char*> args, int num_arg){
-	
+bool is_ligal_kill(vector <char*> args, int num_arg) {
+
 	if (num_arg != 2)
 		return false;
 	if (args[1][0] != '-')
 		return false;
 
+
 	int arg1 = atoi(args[1]);
 	int arg2 = atoi(args[2]);
-	if(arg1 == 0 || arg2 == 0){
+	if (arg1 == 0 || arg2 == 0) {
 		return false;
 	}
-	
 	return true;
 }
 

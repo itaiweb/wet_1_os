@@ -45,27 +45,36 @@ int main(int argc, char *argv[])
 	//  	cout << "no hafifa" << endl;
 	/************************************/
 	// Init globals 
-
+	int ret_exc_val = 0;
+	int ret_bg_val = 0;
 
 		
-    	while (1)
-    	{
+    while (1)
+    {
 		cin.clear();
 	 	printf("smash > ");
 		// fgets(lineSize, MAX_LINE_SIZE, stdin);
 		getline(cin, cmdString);
+		if (cmdString.length() == 0)
+			continue;
 
 		
 		// strcpy(cmdString, lineSize);
 		lineSize = new char[cmdString.length()+1];
 		strcpy(lineSize, cmdString.c_str()); 
-		  	
 		lineSize[strlen(cmdString.c_str())]='\0';
-		// exit(2);
-					// background command
-		if (!BgCmd(lineSize))	continue;
-					// built in commands
-		ExeCmd(lineSize, cmdString.c_str());
+
+		// background command
+		if (!(ret_bg_val = BgCmd(lineSize))) {
+			delete[] lineSize;
+			continue;
+		}
+		else if (ret_bg_val == -1) {
+			delete[] lineSize;
+			return 0;
+		}
+		// built in commands
+		ret_exc_val = ExeCmd(lineSize, cmdString.c_str());
 		if (history_queue.size() == 50)
 		{
 			history_queue.pop_front();
@@ -75,6 +84,10 @@ int main(int argc, char *argv[])
 		/* initialize for next line read*/
 		lineSize[0]='\0';
 		cmdString[0]='\0';
+		delete[] lineSize;
+		if (ret_exc_val == -1) {
+			return 0;
+		}
 	}
     return 0;
 }

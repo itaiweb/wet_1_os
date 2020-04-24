@@ -14,6 +14,7 @@ protected:
 	bool _running;
 public:
 	Job(int PID, string Command, int startTime);
+	~Job() {}
 
 	void print();
 	inline int getPID() { return _PID; }
